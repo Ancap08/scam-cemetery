@@ -16,7 +16,7 @@ v0.1 choices, each with the reason it was made. Limits that follow from those ch
 - **Allowlist, and silence for everyone else.** A private checker should not explain itself to strangers or confirm the bot is alive.
 - **Private chats only.** The same silence applies in groups, so a pasted link in a group is not answered out loud.
 - **Secrets only from the environment.** `.env.example` has blanks, `.env` is gitignored. Source failures log the HTTP status and, for URLhaus, `query_status`, never the API key or the request URL (Safe Browsing puts its key in the query string).
-- **SQLite, one table, 90-day cleanup, `archive` exempts a row.** The history is small. `/archive` is the only way to set the flag. There is no un-archive command.
+- **SQLite, one table, 90-day cleanup, `archive` exempts a row.** The history is small. `/archive` is the only way to set the flag. There is no un-archive command. The daily loop starts in `Application.start`, after the bot is running. `create_task` during `post_init` is too early: python-telegram-bot warns and does not track the task. Shutdown sets an event so the loop exits instead of sleeping out the rest of the day.
 - **At most three URLs per message.** One paste should not fan out into dozens of vendor calls.
 - **Defang support is `hxxp`/`hxxps`, `[.]`, `(.)`, `{.}`, `[dot]`, `(dot)`, and `[:]`.** Those are the forms people actually paste. Userinfo (`user:password@host`) is stripped so a credential in a URL is not stored.
 - **The container runs as uid 1000 and stores the database on a named volume.** A named volume picks up that ownership, so `docker compose up` can write the sqlite file without a host-side `chown`. The image publishes no ports.

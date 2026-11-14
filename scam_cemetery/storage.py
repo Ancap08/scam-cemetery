@@ -3,12 +3,16 @@
 The schema is one table. Rows are small JSON blobs, not a normalized warehouse.
 """
 
+import asyncio
 import json
+import logging
 import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from scam_cemetery.models import CheckResult
+
+logger = logging.getLogger(__name__)
 
 RETENTION_DAYS = 90
 
@@ -100,6 +104,32 @@ class CheckStore:
 
     def get(self, check_id: int) -> sqlite3.Row | None:
         return self._conn.execute("SELECT * FROM checks WHERE id = ?", (check_id,)).fetchone()
+
+
+async def cleanup_loop(
+    store: CheckStore,
+    stop: asyncio.Event,
+    *,
+    interval: float = 24 * 60 * 60,
+) -> None:
+    """Delete expired checks every ``interval`` seconds until ``stop`` is set.
+
+    The wait is interruptible, so shutting the bot down does not sit on the
+    full interval.
+    """
+    while True:
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=interval)
+        except TimeoutError:
+            pass
+        else:
+            return
+        try:
+            removed = store.cleanup()
+        except Exception:
+            logger.exception("daily cleanup failed")
+            continue
+        logger.info("daily cleanup removed %s checks", removed)
 
 
 def _stamp(moment: datetime) -> str:
