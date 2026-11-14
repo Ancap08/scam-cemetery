@@ -10,6 +10,7 @@ from typing import Any
 import httpx
 
 from scam_cemetery.models import SourceResult
+from scam_cemetery.sources.base import SourceFailure
 
 _ENDPOINT = "https://www.virustotal.com/api/v3/urls"
 
@@ -38,7 +39,7 @@ class VirusTotalSource:
                 summary="VirusTotal: URL has not been scanned",
             )
         if response.status_code >= 400:
-            raise RuntimeError(f"HTTP {response.status_code}")
+            raise SourceFailure(f"HTTP {response.status_code}")
         return parse_virustotal(response.json())
 
 

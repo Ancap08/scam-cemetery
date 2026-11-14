@@ -12,7 +12,13 @@ import httpx
 
 from scam_cemetery.judges.base import Judge
 from scam_cemetery.models import CheckResult, Judgment, SourceResult
-from scam_cemetery.sources.base import ThreatSource, error_result, skipped_result, timeout_result
+from scam_cemetery.sources.base import (
+    SourceFailure,
+    ThreatSource,
+    error_result,
+    skipped_result,
+    timeout_result,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -54,9 +60,13 @@ class Pipeline:
         except httpx.TimeoutException:
             logger.warning("%s lookup timed out", source.name)
             return timeout_result(source.name, source.display_name)
+        except SourceFailure as exc:
+            # reason is status code / query_status only. Never the key or the URL.
+            logger.warning("%s lookup failed (%s)", source.name, exc.reason)
+            return error_result(source.name, source.display_name, exc.reason)
         except Exception as exc:
-            # Log the type only. Safe Browsing puts its key in the query string,
-            # and exception text can include that URL.
+            # Other exception text can include a request URL, and Safe Browsing
+            # puts its key in that URL. Log the type only.
             logger.warning("%s lookup failed (%s)", source.name, type(exc).__name__)
             return error_result(source.name, source.display_name)
 

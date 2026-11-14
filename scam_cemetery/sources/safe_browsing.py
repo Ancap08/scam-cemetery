@@ -6,6 +6,7 @@ import httpx
 
 from scam_cemetery import __version__
 from scam_cemetery.models import SourceResult
+from scam_cemetery.sources.base import SourceFailure
 
 _ENDPOINT = "https://safebrowsing.googleapis.com/v4/threatMatches:find"
 _THREAT_TYPES = [
@@ -42,7 +43,7 @@ class SafeBrowsingSource:
             },
         )
         if response.status_code >= 400:
-            raise RuntimeError(f"HTTP {response.status_code}")
+            raise SourceFailure(f"HTTP {response.status_code}")
         return parse_safe_browsing(response.json())
 
 

@@ -72,5 +72,5 @@ async def test_a_failed_source_does_not_block_the_others():
     assert by_name["urlhaus"] == "clean"
     assert result.judgment.verdict == "CAUTION"
     summaries = "\n".join(item.summary for item in result.sources)
-    assert "Google Safe Browsing: request failed" in summaries
+    assert "Google Safe Browsing: HTTP 503" in summaries
     assert "VirusTotal: URL has not been scanned" in summaries

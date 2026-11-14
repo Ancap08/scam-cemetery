@@ -15,7 +15,7 @@ v0.1 choices, each with the reason it was made. Limits that follow from those ch
 - **URLhaus `POST /v1/url/` with the `Auth-Key` header.** That is the documented single-URL lookup. Being listed is malicious even if the URL is offline; `no_results` is clean because the feed only contains malware URLs.
 - **Allowlist, and silence for everyone else.** A private checker should not explain itself to strangers or confirm the bot is alive.
 - **Private chats only.** The same silence applies in groups, so a pasted link in a group is not answered out loud.
-- **Secrets only from the environment.** `.env.example` has blanks, `.env` is gitignored, and logs record exception types rather than request URLs so the Safe Browsing key (it sits in the query string) is not written out.
+- **Secrets only from the environment.** `.env.example` has blanks, `.env` is gitignored. Source failures log the HTTP status and, for URLhaus, `query_status`, never the API key or the request URL (Safe Browsing puts its key in the query string).
 - **SQLite, one table, 90-day cleanup, `archive` exempts a row.** The history is small. `/archive` is the only way to set the flag. There is no un-archive command.
 - **At most three URLs per message.** One paste should not fan out into dozens of vendor calls.
 - **Defang support is `hxxp`/`hxxps`, `[.]`, `(.)`, `{.}`, `[dot]`, `(dot)`, and `[:]`.** Those are the forms people actually paste. Userinfo (`user:password@host`) is stripped so a credential in a URL is not stored.
