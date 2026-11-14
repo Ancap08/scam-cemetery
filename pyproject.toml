@@ -30,6 +30,9 @@ include = ["scam_cemetery*"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
+# The pytest console script does not put the working directory on sys.path.
+# This does, so `from tests.helpers import ...` works in CI.
+pythonpath = ["."]
 
 [tool.ruff]
 target-version = "py312"
