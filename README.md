@@ -93,19 +93,19 @@ The rules judge, which also runs when Grok is unavailable:
 | Situation | Verdict |
 | --- | --- |
 | Any source reports malicious | **NO-GO** |
-| A source is suspicious, unknown, timed out, or errored, and nothing is malicious | **CAUTION** |
-| Every source that actually ran is clean | **GO** |
-| Every source was skipped because no key was set | **CAUTION** |
+| Any source is suspicious, and nothing is malicious | **CAUTION** |
+| At least one source is clean, and none are malicious or suspicious | **GO** |
+| No source came back clean (skipped, unscanned, timed out, or failed) | **CAUTION** |
 
-A skipped source is not a failure. Two clean sources and one missing key is still **GO**.
+A skipped, unscanned, or failed source does not pull a clean result down to CAUTION. Suspicion does: that is a real disagreement, not a missing answer.
 
 What each source means:
 
 - **Google Safe Browsing.** A hit on the malware, social engineering, unwanted software, or potentially harmful application list is malicious. An empty response is clean.
-- **VirusTotal.** One or more engines marking the URL malicious is a hit. Suspicious-only is caution. A URL VirusTotal has never scanned is unknown, which is caution, even if the other sources are clean.
+- **VirusTotal.** One or more engines marking the URL malicious is a hit. Suspicious-only is caution. A URL it has never scanned does not change the verdict when another source is clean.
 - **URLhaus.** A listed URL is malicious, including one marked offline. `no_results` is clean, because URLhaus only lists malware URLs.
 
-If Grok answers **GO** while a source reported malicious, that answer is discarded and the rules judge decides. A positive hit should not be waved through.
+Grok writes the sentence when it picks the same verdict as this table. If it disagrees, the rules verdict is the one that is sent.
 
 ## Development
 

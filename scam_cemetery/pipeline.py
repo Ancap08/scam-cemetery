@@ -71,16 +71,28 @@ class Pipeline:
             return error_result(source.name, source.display_name)
 
     async def _judge(self, url: str, results: list[SourceResult]) -> Judgment:
-        malicious = any(item.status == "malicious" for item in results)
+        rules = next((judge for judge in self._judges if judge.name == "rules"), None)
+        rules_judgment = await rules.judge(url, results) if rules is not None else None
         for judge in self._judges:
+            if judge.name == "rules":
+                if rules_judgment is None:
+                    raise RuntimeError("no judge returned a verdict")
+                return rules_judgment
             try:
                 judgment = await judge.judge(url, results)
             except Exception as exc:
                 logger.warning("judge %s failed (%s)", judge.name, type(exc).__name__)
                 continue
-            if judgment.verdict == "GO" and malicious:
-                # A positive hit should not be waved through, even if the model says so.
-                logger.warning("judge %s returned GO despite a malicious hit", judge.name)
-                continue
+            if rules_judgment is not None and judgment.verdict != rules_judgment.verdict:
+                # The documented table wins. Grok still writes the sentence when it agrees.
+                logger.warning(
+                    "judge %s returned %s; using rules verdict %s",
+                    judge.name,
+                    judgment.verdict,
+                    rules_judgment.verdict,
+                )
+                return rules_judgment
             return judgment
+        if rules_judgment is not None:
+            return rules_judgment
         raise RuntimeError("no judge returned a verdict")

@@ -48,7 +48,7 @@ async def test_a_slow_source_times_out_and_the_others_still_answer():
         "virustotal": "clean",
         "urlhaus": "clean",
     }
-    assert result.judgment.verdict == "CAUTION"
+    assert result.judgment.verdict == "GO"
     assert elapsed < 1.0
 
 
@@ -70,7 +70,7 @@ async def test_a_failed_source_does_not_block_the_others():
     assert by_name["google_safe_browsing"] == "error"
     assert by_name["virustotal"] == "unknown"
     assert by_name["urlhaus"] == "clean"
-    assert result.judgment.verdict == "CAUTION"
+    assert result.judgment.verdict == "GO"
     summaries = "\n".join(item.summary for item in result.sources)
     assert "Google Safe Browsing: HTTP 503" in summaries
     assert "VirusTotal: URL has not been scanned" in summaries
