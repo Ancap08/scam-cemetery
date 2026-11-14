@@ -1,0 +1,42 @@
+[project]
+name = "scam-cemetery"
+version = "0.1.0"
+description = "Telegram link checker: paste a URL, get a GO, CAUTION, or NO-GO verdict."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.27",
+    "python-telegram-bot>=21.6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.6",
+]
+
+[project.scripts]
+scam-cemetery = "scam_cemetery.main:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["scam_cemetery*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+# The pytest console script does not put the working directory on sys.path.
+# This does, so `from tests.helpers import ...` works in CI.
+pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

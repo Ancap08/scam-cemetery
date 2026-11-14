@@ -1,0 +1,55 @@
+"""Shared data the sources, the judge, and the database all pass around."""
+
+from dataclasses import dataclass, field
+from typing import Any, Literal
+
+Verdict = Literal["GO", "CAUTION", "NO-GO"]
+SourceStatus = Literal[
+    "clean",
+    "malicious",
+    "suspicious",
+    "unknown",
+    "error",
+    "timeout",
+    "skipped",
+]
+
+VERDICTS: tuple[Verdict, ...] = ("GO", "CAUTION", "NO-GO")
+
+
+@dataclass(frozen=True)
+class SourceResult:
+    """What one threat-intel source said about a URL."""
+
+    source: str
+    display_name: str
+    status: SourceStatus
+    summary: str
+    detail: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "source": self.source,
+            "display_name": self.display_name,
+            "status": self.status,
+            "summary": self.summary,
+            "detail": self.detail,
+        }
+
+
+@dataclass(frozen=True)
+class Judgment:
+    """A verdict plus the one sentence a person should read."""
+
+    verdict: Verdict
+    reason: str
+    judge: str
+
+
+@dataclass(frozen=True)
+class CheckResult:
+    """One finished check: the URL, every source, and the verdict."""
+
+    url: str
+    sources: list[SourceResult]
+    judgment: Judgment
