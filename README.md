@@ -81,8 +81,9 @@ python -m scam_cemetery
 
 1. The message is refanged (`hxxp`, `[.]`, `(.)`, `[dot]`, `[:]`) and scanned for http(s) links. A bare domain is fine. Up to three links per message are checked.
 2. Google Safe Browsing v4, VirusTotal v3, and URLhaus are queried **in parallel**. Each has a timeout. One slow or failed source cannot block the reply.
-3. The results go to the judge. Grok (xAI's OpenAI-compatible API at `https://api.x.ai/v1`) returns the verdict and one sentence. If xAI is down, unconfigured, or returns junk, a rules judge answers instead.
-4. The check is written to SQLite: URL, time, source results, verdict.
+3. The results go to the judge. Grok (xAI's OpenAI-compatible API at `https://api.x.ai/v1`) returns the verdict and one sentence when it agrees with the rules table. If it disagrees, or xAI is down, the rules judge answers.
+4. If VirusTotal has never scanned the URL, the bot submits it and sends another message when the scan finishes, or after about 60 seconds. VirusTotal calls stay at or under 4 per minute.
+5. The check is written to SQLite: URL, time, source results, verdict.
 
 `/archive` marks your latest check so the 90-day cleanup will not delete it. `/start` explains the bot. Both stay silent for anyone who is not on the allowlist.
 
@@ -102,7 +103,7 @@ A skipped, unscanned, or failed source does not pull a clean result down to CAUT
 What each source means:
 
 - **Google Safe Browsing.** A hit on the malware, social engineering, unwanted software, or potentially harmful application list is malicious. An empty response is clean.
-- **VirusTotal.** One or more engines marking the URL malicious is a hit. Suspicious-only is caution. A URL it has never scanned does not change the verdict when another source is clean.
+- **VirusTotal.** One or more engines marking the URL malicious is a hit. Suspicious-only is caution. A URL it has never scanned does not change the first verdict when another source is clean. The bot then submits it for analysis and follows up.
 - **URLhaus.** A listed URL is malicious, including one marked offline. `no_results` is clean, because URLhaus only lists malware URLs.
 
 Grok writes the sentence when it picks the same verdict as this table. If it disagrees, the rules verdict is the one that is sent.

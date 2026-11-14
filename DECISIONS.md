@@ -10,7 +10,7 @@ v0.1 choices, each with the reason it was made. Limits that follow from those ch
 - **Rules judge if xAI fails, is unconfigured, or disagrees with the table.** The bot still owes a verdict when the model is down. A positive or suspicious hit is not waved through, and a missing or failed source does not turn a clean result into CAUTION.
 - **xAI via `POST https://api.x.ai/v1/chat/completions`, model `grok-4.7`.** That is the OpenAI-compatible base URL the project asked for. `XAI_MODEL` overrides the id when xAI renames it. Chat completions is the legacy endpoint; newer xAI features land on the Responses API first.
 - **Safe Browsing v4 `threatMatches.find`.** It is the lookup API: we send the URL, they say whether it is on a list. Empty body means clean.
-- **VirusTotal v3 URL report, not a new scan.** Lookup stays inside the timeout. "Not scanned" is unknown. It is CAUTION only when no other source came back clean.
+- **VirusTotal lookup first, then a scan when the URL is new.** The first reply stays fast. A missing report is submitted with `POST /api/v3/urls` and polled for about 60 seconds, and the result arrives as a second message. All VirusTotal calls share a budget of 4 per minute, which is the public free tier.
 - **VirusTotal malicious means any engine (`malicious >= 1`).** Simple and conservative. It will sometimes false-positive.
 - **URLhaus `POST /v1/url/` with the `Auth-Key` header.** That is the documented single-URL lookup. Being listed is malicious even if the URL is offline; `no_results` is clean because the feed only contains malware URLs.
 - **Allowlist, and silence for everyone else.** A private checker should not explain itself to strangers or confirm the bot is alive.
@@ -31,5 +31,5 @@ v0.1 choices, each with the reason it was made. Limits that follow from those ch
 - Filenames such as `notes.txt` are not treated as links. A real site whose suffix is in that small denylist (`txt`, `pdf`, `py`, ...) and that was pasted with no scheme is also skipped.
 - Redirects are not followed by this bot. The vendors may follow them on their side.
 - Grok is instructed to follow the same verdict table as the rules. It can still be wrong; the only hard override is "GO while something was malicious".
-- There is no rate limiter beyond the allowlist and the three-URL cap.
+- VirusTotal is limited to 4 requests a minute. The other sources are limited by the allowlist and the three-URL cap.
 - No license file yet.

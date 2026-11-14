@@ -16,7 +16,9 @@ from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandl
 
 from scam_cemetery.config import Settings
 from scam_cemetery.formatting import format_report, split_for_telegram
+from scam_cemetery.models import CheckResult
 from scam_cemetery.pipeline import Pipeline
+from scam_cemetery.scans import watch_virustotal
 from scam_cemetery.storage import CheckStore
 from scam_cemetery.url_extract import extract_urls
 
@@ -33,6 +35,7 @@ HELP_MESSAGE = (
 MAX_URLS_PER_MESSAGE = 3
 
 Send = Callable[[str], Awaitable[None]]
+Schedule = Callable[[Awaitable[None]], None]
 
 
 def should_respond(user_id: int | None, chat_type: str, allowed: frozenset[int] | set[int]) -> bool:
@@ -49,6 +52,7 @@ async def handle_text(
     store: CheckStore,
     client: httpx.AsyncClient,
     send: Send,
+    schedule: Schedule | None = None,
 ) -> None:
     if user_id not in allowed:
         return
@@ -65,6 +69,7 @@ async def handle_text(
         await send(f"checking {len(shown)} links...")
 
     blocks: list[str] = []
+    pending_scans: list[CheckResult] = []
     for url in shown:
         try:
             result = await pipeline.check(url, client)
@@ -77,11 +82,37 @@ async def handle_text(
             continue
         blocks.append(format_report(result))
         logger.info("check user=%s verdict=%s url=%s", user_id, result.judgment.verdict, url)
+        if _needs_virus_total_scan(result):
+            pending_scans.append(result)
     if extra:
         blocks.append(f"I only checked the first {MAX_URLS_PER_MESSAGE} links.")
     # Several long URLs can push one reply past Telegram's 4096-character cap.
     for chunk in split_for_telegram("\n\n".join(blocks)):
         await send(chunk)
+    if schedule is None:
+        return
+    scanner = pipeline.virustotal()
+    if scanner is None:
+        return
+    for result in pending_scans:
+        schedule(
+            watch_virustotal(
+                source=scanner,
+                url=result.url,
+                client=client,
+                prior=result,
+                pipeline=pipeline,
+                store=store,
+                user_id=user_id,
+                send=send,
+            )
+        )
+
+
+def _needs_virus_total_scan(result: CheckResult) -> bool:
+    return any(
+        item.source == "virustotal" and item.detail.get("needs_scan") for item in result.sources
+    )
 
 
 async def handle_archive(
@@ -159,6 +190,10 @@ async def _on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     async def send(text: str) -> None:
         await message.reply_text(text)
 
+    def schedule(work: Awaitable[None]) -> None:
+        # The application is running here, so create_task tracks the scan until shutdown.
+        context.application.create_task(work, name="virustotal-scan")
+
     await handle_text(
         user_id=user.id,
         text=message.text,
@@ -167,6 +202,7 @@ async def _on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         store=context.bot_data["store"],
         client=context.bot_data["client"],
         send=send,
+        schedule=schedule,
     )
 
 

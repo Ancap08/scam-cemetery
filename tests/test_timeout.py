@@ -73,4 +73,4 @@ async def test_a_failed_source_does_not_block_the_others():
     assert result.judgment.verdict == "GO"
     summaries = "\n".join(item.summary for item in result.sources)
     assert "Google Safe Browsing: HTTP 503" in summaries
-    assert "VirusTotal: URL has not been scanned" in summaries
+    assert "VirusTotal: not scanned yet" in summaries

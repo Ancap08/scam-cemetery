@@ -19,6 +19,7 @@ from scam_cemetery.sources.base import (
     skipped_result,
     timeout_result,
 )
+from scam_cemetery.sources.virustotal import VirusTotalSource
 
 logger = logging.getLogger(__name__)
 
@@ -37,11 +38,20 @@ class Pipeline:
         self._judges = judges
         self._timeout = timeout
 
+    def virustotal(self) -> VirusTotalSource | None:
+        for source in self._sources:
+            if isinstance(source, VirusTotalSource) and source.is_configured():
+                return source
+        return None
+
+    async def judge(self, url: str, results: list[SourceResult]) -> Judgment:
+        return await self._judge(url, results)
+
     async def check(self, url: str, client: httpx.AsyncClient) -> CheckResult:
         results = await asyncio.gather(
             *(self._run_source(source, url, client) for source in self._sources)
         )
-        judgment = await self._judge(url, list(results))
+        judgment = await self.judge(url, list(results))
         return CheckResult(url=url, sources=list(results), judgment=judgment)
 
     async def _run_source(
