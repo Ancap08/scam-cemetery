@@ -1,15 +1,117 @@
 """VirusTotal submit, poll, rate limit, and the follow-up message."""
 
 import httpx
+import pytest
 
 from scam_cemetery.judges.rules import RulesJudge
 from scam_cemetery.pipeline import Pipeline
 from scam_cemetery.scans import watch_virustotal
 from scam_cemetery.sources.safe_browsing import SafeBrowsingSource
 from scam_cemetery.sources.urlhaus import URLhausSource
-from scam_cemetery.sources.virustotal import RequestBudget, VirusTotalSource
+from scam_cemetery.sources.virustotal import DeadlineExceeded, RequestBudget, VirusTotalSource
 from scam_cemetery.storage import CheckStore
 from tests.helpers import mock_client
+
+
+async def test_budget_timeout_does_not_take_a_slot_or_wait_out_the_minute():
+    clock = {"t": 0.0}
+
+    async def sleep(seconds: float) -> None:
+        clock["t"] += seconds
+
+    budget = RequestBudget(limit=1, period=60)
+    await budget.acquire(now=lambda: clock["t"], sleep=sleep)
+    with pytest.raises(DeadlineExceeded):
+        await budget.acquire(now=lambda: clock["t"], sleep=sleep, timeout=10)
+    assert clock["t"] == 10
+    clock["t"] = 60
+    await budget.acquire(now=lambda: clock["t"], sleep=sleep, timeout=1)
+
+
+async def test_scan_stops_when_the_rate_limit_would_outlast_the_deadline(tmp_path):
+    clock = {"t": 0.0}
+    posts = {"n": 0}
+
+    async def sleep(seconds: float) -> None:
+        clock["t"] += seconds
+
+    budget = RequestBudget(limit=1, period=60)
+    await budget.acquire(now=lambda: clock["t"], sleep=sleep)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        posts["n"] += 1
+        return httpx.Response(200, json={"data": {"id": "u-too-late"}})
+
+    store = CheckStore(tmp_path / "checks.db")
+    source = VirusTotalSource("vt-key", budget=budget)
+    pipeline = Pipeline(sources=[source], judges=[RulesJudge()], timeout=5)
+    sent: list[str] = []
+
+    async def send(text: str) -> None:
+        sent.append(text)
+
+    async with mock_client(handler) as client:
+        await watch_virustotal(
+            source=source,
+            url="https://new.example/a",
+            client=client,
+            prior=_prior(),
+            pipeline=pipeline,
+            store=store,
+            user_id=7,
+            send=send,
+            deadline_seconds=10,
+            now=lambda: clock["t"],
+            sleep=sleep,
+        )
+
+    assert posts["n"] == 0
+    assert sent == ["VirusTotal is still scanning. I stopped waiting after 60 seconds."]
+    assert clock["t"] == 10
+    store.close()
+
+
+async def test_poll_does_not_wait_past_the_deadline_for_a_rate_limit_slot(tmp_path):
+    clock = {"t": 0.0}
+    gets = {"n": 0}
+
+    async def sleep(seconds: float) -> None:
+        clock["t"] += seconds
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            return httpx.Response(200, json={"data": {"id": "u-queued"}})
+        gets["n"] += 1
+        return httpx.Response(200, json={"data": {"attributes": {"status": "queued"}}})
+
+    store = CheckStore(tmp_path / "checks.db")
+    source = VirusTotalSource("vt-key", budget=RequestBudget(limit=1, period=60))
+    pipeline = Pipeline(sources=[source], judges=[RulesJudge()], timeout=5)
+    sent: list[str] = []
+
+    async def send(text: str) -> None:
+        sent.append(text)
+
+    async with mock_client(handler) as client:
+        await watch_virustotal(
+            source=source,
+            url="https://new.example/a",
+            client=client,
+            prior=_prior(),
+            pipeline=pipeline,
+            store=store,
+            user_id=7,
+            send=send,
+            deadline_seconds=30,
+            poll_interval=20,
+            now=lambda: clock["t"],
+            sleep=sleep,
+        )
+
+    assert gets["n"] == 0
+    assert sent == ["VirusTotal is still scanning. I stopped waiting after 60 seconds."]
+    assert clock["t"] == 30
+    store.close()
 
 
 async def test_budget_allows_four_calls_then_waits_out_the_minute():
@@ -128,7 +230,8 @@ async def test_scan_stops_at_the_deadline(tmp_path):
         )
 
     assert sent == ["VirusTotal is still scanning. I stopped waiting after 60 seconds."]
-    assert polls["n"] == 3
+    # The last 20s step lands on the deadline, so that poll is not started.
+    assert polls["n"] == 2
     assert clock["t"] == 60
     store.close()
 

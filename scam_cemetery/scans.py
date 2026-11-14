@@ -11,13 +11,14 @@ from scam_cemetery.formatting import format_report, split_for_telegram
 from scam_cemetery.models import CheckResult, SourceResult
 from scam_cemetery.pipeline import Pipeline
 from scam_cemetery.sources.base import SourceFailure
-from scam_cemetery.sources.virustotal import VirusTotalSource
+from scam_cemetery.sources.virustotal import DeadlineExceeded, VirusTotalSource
 from scam_cemetery.storage import CheckStore
 
 logger = logging.getLogger(__name__)
 
 SCAN_DEADLINE_SECONDS = 60.0
 POLL_INTERVAL_SECONDS = 20.0
+SCAN_TIMEOUT_MESSAGE = "VirusTotal is still scanning. I stopped waiting after 60 seconds."
 Send = Callable[[str], Awaitable[None]]
 
 
@@ -40,8 +41,17 @@ async def watch_virustotal(
     clock = now or time.monotonic
     pause = sleep or asyncio.sleep
     started = clock()
+
+    def remaining() -> float:
+        return deadline_seconds - (clock() - started)
+
     try:
-        analysis_id = await source.submit(url, client)
+        if remaining() <= 0:
+            raise DeadlineExceeded()
+        analysis_id = await source.submit(url, client, timeout=remaining(), now=clock, sleep=pause)
+    except DeadlineExceeded:
+        await send(SCAN_TIMEOUT_MESSAGE)
+        return
     except SourceFailure as exc:
         await send(f"VirusTotal scan was not submitted ({exc.reason}).")
         return
@@ -51,13 +61,20 @@ async def watch_virustotal(
         return
 
     while True:
-        remaining = deadline_seconds - (clock() - started)
-        if remaining <= 0:
-            await send("VirusTotal is still scanning. I stopped waiting after 60 seconds.")
+        left = remaining()
+        if left <= 0:
+            await send(SCAN_TIMEOUT_MESSAGE)
             return
-        await pause(min(poll_interval, remaining))
+        await pause(min(poll_interval, left))
+        left = remaining()
+        if left <= 0:
+            await send(SCAN_TIMEOUT_MESSAGE)
+            return
         try:
-            polled = await source.poll(analysis_id, client)
+            polled = await source.poll(analysis_id, client, timeout=left, now=clock, sleep=pause)
+        except DeadlineExceeded:
+            await send(SCAN_TIMEOUT_MESSAGE)
+            return
         except SourceFailure as exc:
             await send(f"VirusTotal scan check failed ({exc.reason}).")
             return

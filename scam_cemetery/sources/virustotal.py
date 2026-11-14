@@ -23,6 +23,10 @@ _ANALYSES = "https://www.virustotal.com/api/v3/analyses"
 _ANALYSIS_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 
 
+class DeadlineExceeded(Exception):
+    """The scan deadline ran out while waiting for a VirusTotal request slot."""
+
+
 class RequestBudget:
     """Allow at most ``limit`` acquisitions in any ``period`` seconds."""
 
@@ -37,17 +41,31 @@ class RequestBudget:
         *,
         now: Callable[[], float] | None = None,
         sleep: Callable[[float], Awaitable[None]] | None = None,
+        timeout: float | None = None,
     ) -> None:
+        """Wait for a free slot.
+
+        ``timeout`` is the longest this call may wait, on the same clock as ``now``.
+        When it expires, no slot is taken.
+        """
         clock = now or time.monotonic
         pause = sleep or asyncio.sleep
+        started = clock()
         while True:
             async with self._lock:
                 current = clock()
+                if timeout is not None and current - started >= timeout:
+                    raise DeadlineExceeded()
                 self._stamps = [stamp for stamp in self._stamps if current - stamp < self.period]
                 if len(self._stamps) < self.limit:
                     self._stamps.append(current)
                     return
                 wait_for = self.period - (current - self._stamps[0])
+                if timeout is not None:
+                    remaining = timeout - (current - started)
+                    if remaining <= 0:
+                        raise DeadlineExceeded()
+                    wait_for = min(wait_for, remaining)
             await pause(max(wait_for, 0))
 
 
@@ -80,9 +98,17 @@ class VirusTotalSource:
             raise SourceFailure(f"HTTP {response.status_code}")
         return parse_virustotal(response.json())
 
-    async def submit(self, url: str, client: httpx.AsyncClient) -> str:
+    async def submit(
+        self,
+        url: str,
+        client: httpx.AsyncClient,
+        *,
+        timeout: float | None = None,
+        now: Callable[[], float] | None = None,
+        sleep: Callable[[float], Awaitable[None]] | None = None,
+    ) -> str:
         """Ask VirusTotal to scan ``url``. Returns the analysis id."""
-        await self.budget.acquire()
+        await self.budget.acquire(now=now, sleep=sleep, timeout=timeout)
         response = await client.post(
             _ENDPOINT,
             data={"url": url},
@@ -95,11 +121,19 @@ class VirusTotalSource:
             raise SourceFailure("submit response had no analysis id")
         return analysis_id
 
-    async def poll(self, analysis_id: str, client: httpx.AsyncClient) -> SourceResult | None:
+    async def poll(
+        self,
+        analysis_id: str,
+        client: httpx.AsyncClient,
+        *,
+        timeout: float | None = None,
+        now: Callable[[], float] | None = None,
+        sleep: Callable[[float], Awaitable[None]] | None = None,
+    ) -> SourceResult | None:
         """Return the scan result, or None if VirusTotal is not finished."""
         if not _ANALYSIS_ID.fullmatch(analysis_id):
             raise SourceFailure("analysis id was not usable")
-        await self.budget.acquire()
+        await self.budget.acquire(now=now, sleep=sleep, timeout=timeout)
         response = await client.get(
             f"{_ANALYSES}/{analysis_id}",
             headers=self._headers(),
