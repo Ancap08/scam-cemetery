@@ -1,0 +1,99 @@
+{
+  "notes": "Illustrative payloads shaped like the real APIs. The tests replay them offline. They are not recordings of live lookups. The known-bad URLs are Google's published Safe Browsing test pages, not real malware.",
+  "known_good": [
+    {
+      "url": "https://www.wikipedia.org/",
+      "note": "Long-lived reference site.",
+      "safe_browsing": {},
+      "virustotal": {
+        "data": {
+          "attributes": {
+            "last_analysis_stats": {
+              "malicious": 0,
+              "suspicious": 0,
+              "harmless": 72,
+              "undetected": 8
+            }
+          }
+        }
+      },
+      "urlhaus": {"query_status": "no_results"},
+      "expected_verdict": "GO"
+    },
+    {
+      "url": "https://www.python.org/",
+      "note": "Language homepage.",
+      "safe_browsing": {},
+      "virustotal": {
+        "data": {
+          "attributes": {
+            "last_analysis_stats": {
+              "malicious": 0,
+              "suspicious": 0,
+              "harmless": 68,
+              "undetected": 6
+            }
+          }
+        }
+      },
+      "urlhaus": {"query_status": "no_results"},
+      "expected_verdict": "GO"
+    }
+  ],
+  "known_bad": [
+    {
+      "url": "http://malware.testing.google.test/testing/malware/",
+      "note": "Google's official Safe Browsing malware test URL. Safe Browsing always lists it. The VirusTotal and URLhaus bodies here are illustrative, so the test shows a hit from every source.",
+      "safe_browsing": {
+        "matches": [
+          {
+            "threatType": "MALWARE",
+            "platformType": "ANY_PLATFORM",
+            "threatEntryType": "URL"
+          }
+        ]
+      },
+      "virustotal": {
+        "data": {
+          "attributes": {
+            "last_analysis_stats": {
+              "malicious": 14,
+              "suspicious": 2,
+              "harmless": 40,
+              "undetected": 10
+            }
+          }
+        }
+      },
+      "urlhaus": {
+        "query_status": "ok",
+        "url_status": "online",
+        "threat": "malware_download"
+      },
+      "expected_verdict": "NO-GO"
+    },
+    {
+      "url": "https://testsafebrowsing.appspot.com/s/phishing.html",
+      "note": "Google's official phishing test page. Only Safe Browsing is malicious in this fixture, which is enough for NO-GO.",
+      "safe_browsing": {
+        "matches": [
+          {"threatType": "SOCIAL_ENGINEERING"}
+        ]
+      },
+      "virustotal": {
+        "data": {
+          "attributes": {
+            "last_analysis_stats": {
+              "malicious": 0,
+              "suspicious": 0,
+              "harmless": 60,
+              "undetected": 5
+            }
+          }
+        }
+      },
+      "urlhaus": {"query_status": "no_results"},
+      "expected_verdict": "NO-GO"
+    }
+  ]
+}
