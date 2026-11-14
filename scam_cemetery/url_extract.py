@@ -31,7 +31,7 @@ _BARE_URL = re.compile(
     (?<!@)
     (?<![\w:/])
     (?P<host>(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,})
-    (?P<rest>(?::\d{2,5})?(?:/[^\s<>"'`]*)?)
+    (?P<rest>(?::\d{2,5})?(?:/[^\s<>"'`]*)?(?:\?[^\s<>"'`]*)?)
     """
 )
 
@@ -115,6 +115,18 @@ def refang(text: str) -> str:
 
 
 def _normalize(raw: str, *, had_scheme: bool) -> str | None:
+    """Return a canonical http(s) URL, or None if this candidate is not one.
+
+    ``urlsplit`` and ``.port`` raise ``ValueError`` for a bad port or an
+    unmatched bracket. One bad paste must not abort the rest of the message.
+    """
+    try:
+        return _normalize_or_raise(raw, had_scheme=had_scheme)
+    except ValueError:
+        return None
+
+
+def _normalize_or_raise(raw: str, *, had_scheme: bool) -> str | None:
     candidate = _strip_trailing(raw.strip())
     if not candidate or len(candidate) > _MAX_URL_LENGTH:
         return None

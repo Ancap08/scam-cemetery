@@ -5,6 +5,7 @@ import pytest
 
 from scam_cemetery.bot import CHECKING_MESSAGE, NO_LINK_MESSAGE, handle_text, should_respond
 from scam_cemetery.config import ConfigError, Settings
+from scam_cemetery.formatting import split_for_telegram
 from scam_cemetery.models import CheckResult, Judgment, SourceResult
 from scam_cemetery.storage import CheckStore
 
@@ -155,6 +156,66 @@ async def test_no_link_asks_for_one_and_multiple_links_are_counted(tmp_path):
     assert "https://ex3.example/" not in sent[1]
     assert "I only checked the first 3 links." in sent[1]
     store.close()
+
+
+async def test_a_malformed_link_does_not_block_the_valid_one(tmp_path):
+    store = CheckStore(tmp_path / "checks.db")
+    sent: list[str] = []
+
+    async def send(text: str) -> None:
+        sent.append(text)
+
+    await handle_text(
+        user_id=42,
+        text="https://example.com:abc/a https://ok.example/x",
+        allowed=ALLOWED,
+        pipeline=_ScriptedPipeline(sent),
+        store=store,
+        client=_unused_client(),
+        send=send,
+    )
+    assert sent[0] == CHECKING_MESSAGE
+    assert "https://ok.example/x" in sent[1]
+    assert "example.com:abc" not in sent[1]
+    store.close()
+
+
+async def test_a_long_reply_is_split_under_the_telegram_limit(tmp_path):
+    store = CheckStore(tmp_path / "checks.db")
+    sent: list[str] = []
+
+    async def send(text: str) -> None:
+        sent.append(text)
+
+    links = " ".join(f"https://ex{i}.example/{'a' * 1800}" for i in range(3))
+    await handle_text(
+        user_id=42,
+        text=links,
+        allowed=ALLOWED,
+        pipeline=_ScriptedPipeline(sent),
+        store=store,
+        client=_unused_client(),
+        send=send,
+    )
+    followups = sent[1:]
+    assert len(followups) >= 2
+    assert all(len(part) <= 4096 for part in followups)
+    joined = "\n".join(followups)
+    assert "https://ex0.example/" in joined
+    assert "https://ex2.example/" in joined
+    store.close()
+
+
+def test_split_for_telegram_prefers_a_blank_line_and_hard_cuts():
+    assert split_for_telegram("short") == ["short"]
+    left = "A" * 3000
+    right = "B" * 3000
+    parts = split_for_telegram(f"{left}\n\n{right}", limit=4096)
+    assert parts == [left, right]
+    huge = "C" * 5000
+    pieces = split_for_telegram(huge, limit=4096)
+    assert [len(piece) for piece in pieces] == [4096, 5000 - 4096]
+    assert "".join(pieces) == huge
 
 
 class _BoomPipeline:

@@ -15,7 +15,7 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 from scam_cemetery.config import Settings
-from scam_cemetery.formatting import format_report
+from scam_cemetery.formatting import format_report, split_for_telegram
 from scam_cemetery.pipeline import Pipeline
 from scam_cemetery.storage import CheckStore
 from scam_cemetery.url_extract import extract_urls
@@ -79,7 +79,9 @@ async def handle_text(
         logger.info("check user=%s verdict=%s url=%s", user_id, result.judgment.verdict, url)
     if extra:
         blocks.append(f"I only checked the first {MAX_URLS_PER_MESSAGE} links.")
-    await send("\n\n".join(blocks))
+    # Several long URLs can push one reply past Telegram's 4096-character cap.
+    for chunk in split_for_telegram("\n\n".join(blocks)):
+        await send(chunk)
 
 
 async def handle_archive(

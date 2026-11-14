@@ -64,3 +64,15 @@ def test_trailing_punctuation_and_parentheses():
 
 def test_userinfo_is_dropped_so_it_is_not_stored():
     assert extract_urls("https://user:secret@example.com/a") == ["https://example.com/a"]
+
+
+def test_a_bad_url_is_skipped_and_the_other_link_remains():
+    text = "https://example.com:abc/a and also https://ok.example/x"
+    assert extract_urls(text) == ["https://ok.example/x"]
+    assert extract_urls("https://example.com:99999/a") == []
+    assert extract_urls("http://[::1") == []
+
+
+def test_bare_domain_keeps_its_query_string():
+    assert extract_urls("example.com?token=abc") == ["https://example.com?token=abc"]
+    assert extract_urls("see example.com/path?q=1 thanks") == ["https://example.com/path?q=1"]
