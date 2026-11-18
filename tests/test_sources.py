@@ -2,9 +2,12 @@
 
 import base64
 import json
+import logging
 
 import httpx
 
+from scam_cemetery.judges.rules import RulesJudge
+from scam_cemetery.pipeline import Pipeline
 from scam_cemetery.sources.safe_browsing import SafeBrowsingSource, parse_safe_browsing
 from scam_cemetery.sources.urlhaus import URLhausSource, parse_urlhaus
 from scam_cemetery.sources.virustotal import VirusTotalSource, parse_virustotal, url_identifier
@@ -80,3 +83,38 @@ async def test_urlhaus_posts_the_url_with_an_auth_key_header():
     assert "malware_download" in result.summary
     assert parse_urlhaus({"query_status": "no_results"}).status == "clean"
     assert parse_urlhaus({"query_status": "invalid_url"}).status == "error"
+
+
+async def test_urlhaus_no_results_is_clean_on_http_200_and_on_an_error_status():
+    async def check(status: int) -> str:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(status, json={"query_status": "no_results"})
+
+        async with mock_client(handler) as client:
+            result = await URLhausSource("uh-key").lookup("http://example.com/", client)
+        return result.status
+
+    assert await check(200) == "clean"
+    assert await check(404) == "clean"
+
+
+async def test_urlhaus_http_error_names_the_status_and_not_the_key(caplog):
+    caplog.set_level(logging.WARNING)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["auth-key"] == "super-secret-key"
+        return httpx.Response(403, json={"query_status": "unknown_auth_key"})
+
+    pipeline = Pipeline(
+        sources=[URLhausSource("super-secret-key")],
+        judges=[RulesJudge()],
+        timeout=5,
+    )
+    async with mock_client(handler) as client:
+        result = await pipeline.check("http://example.com/", client)
+
+    assert result.sources[0].status == "error"
+    assert "HTTP 403" in result.sources[0].summary
+    assert "query_status=unknown_auth_key" in result.sources[0].summary
+    assert "urlhaus lookup failed (HTTP 403, query_status=unknown_auth_key)" in caplog.text
+    assert "super-secret-key" not in caplog.text

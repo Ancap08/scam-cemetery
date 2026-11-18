@@ -27,11 +27,56 @@ async def test_rules_malicious_is_nogo():
     assert "Google Safe Browsing" in judgment.reason
 
 
-async def test_rules_unknown_error_timeout_and_suspicious_are_caution():
+async def test_rules_a_single_gap_or_a_suspicion_is_caution():
     judge = RulesJudge()
     for status in ("unknown", "error", "timeout", "suspicious"):
         judgment = await judge.judge("https://example.com/", [source("VirusTotal", status)])
         assert judgment.verdict == "CAUTION", status
+
+
+async def test_rules_a_clean_source_stands_when_another_only_failed():
+    judge = RulesJudge()
+    for status in ("unknown", "error", "timeout", "skipped"):
+        judgment = await judge.judge(
+            "https://example.com/",
+            [
+                source("Google Safe Browsing", "clean"),
+                source("VirusTotal", status),
+            ],
+        )
+        assert judgment.verdict == "GO", status
+
+
+async def test_rules_suspicion_stays_caution_even_when_another_source_is_clean():
+    judgment = await RulesJudge().judge(
+        "https://example.com/",
+        [
+            source("Google Safe Browsing", "clean"),
+            source("VirusTotal", "suspicious"),
+        ],
+    )
+    assert judgment.verdict == "CAUTION"
+
+
+async def test_grok_cannot_downgrade_a_clean_result_over_an_unscanned_source():
+    def handler(request: httpx.Request) -> httpx.Response:
+        answer = {"verdict": "CAUTION", "reason": "VirusTotal has not scanned it."}
+        return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(answer)}}]})
+
+    async with mock_client(handler) as client:
+        judge = GrokJudge(
+            "test-key", model="grok-4.7", base_url="https://api.x.ai/v1", client=client
+        )
+        result = await _pipeline(
+            [judge, RulesJudge()],
+            sources=[
+                _static("google_safe_browsing", "Google Safe Browsing", "clean"),
+                _static("virustotal", "VirusTotal", "unknown"),
+            ],
+        ).check("https://example.com/", client)
+
+    assert result.judgment.judge == "rules"
+    assert result.judgment.verdict == "GO"
 
 
 async def test_rules_all_clean_is_go_and_skipped_sources_do_not_count():

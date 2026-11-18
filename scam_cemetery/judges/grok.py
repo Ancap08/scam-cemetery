@@ -32,11 +32,12 @@ Reply with one JSON object and nothing else, in this shape:
 
 Choose the verdict like this:
 - NO-GO if any source status is "malicious".
-- CAUTION if none are malicious, but any source that ran is "suspicious", \
-"unknown", "error", or "timeout".
-- GO if every source that ran is "clean".
-- CAUTION if every source was "skipped".
-Ignore sources whose status is "skipped"; that only means no API key was set.
+- CAUTION if none are malicious, but any source status is "suspicious".
+- GO if at least one source is "clean" and none are "malicious" or "suspicious". \
+"unknown", "error", "timeout", and "skipped" do not downgrade that GO.
+- CAUTION if no source is "clean" (every source was skipped, unscanned, \
+timed out, or failed).
+Ignore sources whose status is "skipped" except when every source was skipped.
 The reason must be one sentence a non-expert can understand, based only on the \
 source summaries. Do not invent findings.
 """

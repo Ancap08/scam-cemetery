@@ -1,14 +1,15 @@
 """Deterministic verdict used when no model judge can answer.
 
 - any source flags malicious -> NO-GO
-- unknown, suspicious, timeout, or error -> CAUTION
-- every source that actually ran is clean -> GO
-- every source was skipped -> CAUTION
+- any source is suspicious, and nothing is malicious -> CAUTION
+- at least one source is clean, and none are malicious or suspicious -> GO
+- nothing came back clean -> CAUTION
+
+An unscanned, timed-out, or failed source does not downgrade a result that
+already has a clean source. Suspicion is the ambiguity that still means CAUTION.
 """
 
 from scam_cemetery.models import Judgment, SourceResult
-
-_PROBLEM = frozenset({"suspicious", "unknown", "error", "timeout"})
 
 
 class RulesJudge:
@@ -25,26 +26,33 @@ class RulesJudge:
                 judge=self.name,
             )
 
-        ran = [item for item in results if item.status != "skipped"]
-        if not ran:
+        suspicious = [item for item in results if item.status == "suspicious"]
+        clean = [item for item in results if item.status == "clean"]
+        if suspicious:
+            names = _join([item.display_name for item in suspicious])
+            return Judgment(
+                verdict="CAUTION",
+                reason=f"{names} found something suspicious, which is not a clear hit.",
+                judge=self.name,
+            )
+        if clean:
+            return Judgment(
+                verdict="GO",
+                reason="A source came back clean, and none reported a threat.",
+                judge=self.name,
+            )
+
+        configured = [item for item in results if item.status != "skipped"]
+        if not configured:
             return Judgment(
                 verdict="CAUTION",
                 reason="No threat-intel sources are configured, so this URL was not checked.",
                 judge=self.name,
             )
-
-        problems = [item for item in ran if item.status in _PROBLEM]
-        if problems:
-            detail = ", ".join(f"{item.display_name} ({item.status})" for item in problems)
-            return Judgment(
-                verdict="CAUTION",
-                reason=f"Not enough clean data: {detail}.",
-                judge=self.name,
-            )
-
+        detail = ", ".join(f"{item.display_name} ({item.status})" for item in configured)
         return Judgment(
-            verdict="GO",
-            reason="Every configured source came back clean.",
+            verdict="CAUTION",
+            reason=f"No source came back clean: {detail}.",
             judge=self.name,
         )
 

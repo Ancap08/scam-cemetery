@@ -81,8 +81,9 @@ python -m scam_cemetery
 
 1. The message is refanged (`hxxp`, `[.]`, `(.)`, `[dot]`, `[:]`) and scanned for http(s) links. A bare domain is fine. Up to three links per message are checked.
 2. Google Safe Browsing v4, VirusTotal v3, and URLhaus are queried **in parallel**. Each has a timeout. One slow or failed source cannot block the reply.
-3. The results go to the judge. Grok (xAI's OpenAI-compatible API at `https://api.x.ai/v1`) returns the verdict and one sentence. If xAI is down, unconfigured, or returns junk, a rules judge answers instead.
-4. The check is written to SQLite: URL, time, source results, verdict.
+3. The results go to the judge. Grok (xAI's OpenAI-compatible API at `https://api.x.ai/v1`) returns the verdict and one sentence when it agrees with the rules table. If it disagrees, or xAI is down, the rules judge answers.
+4. If VirusTotal has never scanned the URL, the bot submits it and sends another message when the scan finishes, or after about 60 seconds. VirusTotal calls stay at or under 4 per minute.
+5. The check is written to SQLite: URL, time, source results, verdict.
 
 `/archive` marks your latest check so the 90-day cleanup will not delete it. `/start` explains the bot. Both stay silent for anyone who is not on the allowlist.
 
@@ -93,19 +94,19 @@ The rules judge, which also runs when Grok is unavailable:
 | Situation | Verdict |
 | --- | --- |
 | Any source reports malicious | **NO-GO** |
-| A source is suspicious, unknown, timed out, or errored, and nothing is malicious | **CAUTION** |
-| Every source that actually ran is clean | **GO** |
-| Every source was skipped because no key was set | **CAUTION** |
+| Any source is suspicious, and nothing is malicious | **CAUTION** |
+| At least one source is clean, and none are malicious or suspicious | **GO** |
+| No source came back clean (skipped, unscanned, timed out, or failed) | **CAUTION** |
 
-A skipped source is not a failure. Two clean sources and one missing key is still **GO**.
+A skipped, unscanned, or failed source does not pull a clean result down to CAUTION. Suspicion does: that is a real disagreement, not a missing answer.
 
 What each source means:
 
 - **Google Safe Browsing.** A hit on the malware, social engineering, unwanted software, or potentially harmful application list is malicious. An empty response is clean.
-- **VirusTotal.** One or more engines marking the URL malicious is a hit. Suspicious-only is caution. A URL VirusTotal has never scanned is unknown, which is caution, even if the other sources are clean.
+- **VirusTotal.** One or more engines marking the URL malicious is a hit. Suspicious-only is caution. A URL it has never scanned does not change the first verdict when another source is clean. The bot then submits it for analysis and follows up.
 - **URLhaus.** A listed URL is malicious, including one marked offline. `no_results` is clean, because URLhaus only lists malware URLs.
 
-If Grok answers **GO** while a source reported malicious, that answer is discarded and the rules judge decides. A positive hit should not be waved through.
+Grok writes the sentence when it picks the same verdict as this table. If it disagrees, the rules verdict is the one that is sent.
 
 ## Development
 
