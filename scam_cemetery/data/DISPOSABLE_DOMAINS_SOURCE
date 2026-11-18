@@ -1,0 +1,10 @@
+Normal-mode disposable domain list, one domain per line.
+
+Source: https://github.com/disposable/disposable-email-domains/blob/master/domains.txt
+Generator: https://github.com/disposable/disposable
+Fetched: 2026-11-18
+
+This is the normal list, not domains_strict.txt. Ordinary freemail providers
+are not included. The file is a snapshot and is not refreshed automatically.
+
+License: MIT. See DISPOSABLE_DOMAINS_LICENSE in this directory.

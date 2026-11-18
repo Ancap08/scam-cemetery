@@ -1,0 +1,73 @@
+{
+  "notes": "Offline phone cases. Classifications come from libphonenumber prefix data, not a live carrier lookup. Displays keep the country code and the last four digits.",
+  "cases": [
+    {
+      "name": "valid US",
+      "raw": "(415) 555-2671",
+      "region": "US",
+      "extract": true,
+      "e164": "+14155552671",
+      "display": "+1******2671",
+      "status": "clean",
+      "region_code": "US",
+      "line_type": "fixed line or mobile",
+      "verdict": "GO"
+    },
+    {
+      "name": "invalid",
+      "raw": "+1 000 000 0000",
+      "region": "US",
+      "extract": false,
+      "status": "suspicious",
+      "verdict": "CAUTION"
+    },
+    {
+      "name": "toll-free",
+      "raw": "1-800-555-0199",
+      "region": "US",
+      "extract": true,
+      "e164": "+18005550199",
+      "display": "+1******0199",
+      "status": "clean",
+      "region_code": "US",
+      "line_type": "toll-free",
+      "verdict": "GO"
+    },
+    {
+      "name": "premium-rate",
+      "raw": "+1 900 555 1212",
+      "region": "US",
+      "extract": true,
+      "e164": "+19005551212",
+      "display": "+1******1212",
+      "status": "suspicious",
+      "region_code": "US",
+      "line_type": "premium-rate",
+      "verdict": "CAUTION"
+    },
+    {
+      "name": "international",
+      "raw": "+44 20 7946 0958",
+      "region": "US",
+      "extract": true,
+      "e164": "+442079460958",
+      "display": "+44******0958",
+      "status": "clean",
+      "region_code": "GB",
+      "line_type": "fixed line",
+      "verdict": "GO"
+    },
+    {
+      "name": "voip",
+      "raw": "+44 56 1234 5678",
+      "region": "US",
+      "extract": true,
+      "e164": "+445612345678",
+      "display": "+44******5678",
+      "status": "suspicious",
+      "region_code": "GB",
+      "line_type": "VoIP",
+      "verdict": "CAUTION"
+    }
+  ]
+}

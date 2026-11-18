@@ -22,14 +22,21 @@ def test_allowlist_matrix():
 
 def test_settings_repr_does_not_include_secrets():
     settings = Settings.from_env(
-        _env(XAI_API_KEY="super-secret", GOOGLE_SAFE_BROWSING_KEY="gsb-secret")
+        _env(
+            XAI_API_KEY="super-secret",
+            GOOGLE_SAFE_BROWSING_KEY="gsb-secret",
+            NUMVERIFY_API_KEY="nv-secret",
+        )
     )
     text = repr(settings)
     assert "super-secret" not in text
     assert "gsb-secret" not in text
+    assert "nv-secret" not in text
     assert "123:abc" not in text
     assert "google_safe_browsing" in text
+    assert "numverify" in text
     assert "grok" in text
+    assert settings.default_phone_region == "US"
 
 
 def test_main_refuses_to_start_without_a_token(monkeypatch):
@@ -61,6 +68,8 @@ def test_settings_parse_the_allowlist_and_reject_garbage():
         Settings.from_env(_env(ALLOWED_TELEGRAM_USER_IDS="0"))
     with pytest.raises(ConfigError):
         Settings.from_env(_env(TELEGRAM_BOT_TOKEN=""))
+    with pytest.raises(ConfigError):
+        Settings.from_env(_env(DEFAULT_PHONE_REGION="NOPE"))
 
 
 async def test_stranger_gets_silence_and_nothing_is_stored(tmp_path):

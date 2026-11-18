@@ -17,22 +17,29 @@ from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandl
 from scam_cemetery.config import Settings
 from scam_cemetery.formatting import format_report, split_for_telegram
 from scam_cemetery.models import CheckResult
-from scam_cemetery.pipeline import Pipeline
+from scam_cemetery.pipeline import Checker, Pipeline
 from scam_cemetery.scans import watch_virustotal
 from scam_cemetery.storage import CheckStore, cleanup_loop
-from scam_cemetery.url_extract import extract_urls
+from scam_cemetery.subjects import extract_subjects
 
 logger = logging.getLogger(__name__)
 
 CHECKING_MESSAGE = "checking..."
-NO_LINK_MESSAGE = "Send me a link and I'll check it. A bare domain is fine."
+NO_LINK_MESSAGE = (
+    "Send me a link, an email address, or a phone number and I'll check it. A bare domain is fine."
+)
 HELP_MESSAGE = (
-    "Paste a link and I'll check it with Google Safe Browsing, VirusTotal, and URLhaus.\n"
+    "Paste a link, an email address, or a phone number and I'll check it.\n"
+    "\n"
+    "Links use Google Safe Browsing, VirusTotal, and URLhaus.\n"
+    "Email addresses also get DNS, domain age, disposable-domain, and lookalike checks.\n"
+    "Phone numbers are checked offline. Numverify runs only if a key is set.\n"
     "\n"
     "Verdicts are GO, CAUTION, or NO-GO.\n"
+    "Email addresses and phone numbers are stored redacted, not in full.\n"
     "/archive keeps your latest check past the 90-day cleanup."
 )
-MAX_URLS_PER_MESSAGE = 3
+MAX_ITEMS_PER_MESSAGE = 3
 
 Send = Callable[[str], Awaitable[None]]
 Schedule = Callable[[Awaitable[None]], None]
@@ -48,44 +55,60 @@ async def handle_text(
     user_id: int,
     text: str,
     allowed: frozenset[int] | set[int],
-    pipeline: Pipeline,
+    pipeline: Pipeline | Checker,
     store: CheckStore,
     client: httpx.AsyncClient,
     send: Send,
     schedule: Schedule | None = None,
+    default_phone_region: str = "US",
 ) -> None:
     if user_id not in allowed:
         return
-    urls = extract_urls(text)
-    if not urls:
+    subjects = extract_subjects(text, default_region=default_phone_region)
+    if not subjects:
         await send(NO_LINK_MESSAGE)
         return
 
-    shown = urls[:MAX_URLS_PER_MESSAGE]
-    extra = len(urls) - len(shown)
+    shown = subjects[:MAX_ITEMS_PER_MESSAGE]
+    extra = len(subjects) - len(shown)
     if len(shown) == 1:
         await send(CHECKING_MESSAGE)
-    else:
+    elif all(item.kind == "url" for item in shown):
         await send(f"checking {len(shown)} links...")
+    else:
+        await send(f"checking {len(shown)} items...")
 
     blocks: list[str] = []
     pending_scans: list[CheckResult] = []
-    for url in shown:
+    for subject in shown:
         try:
-            result = await pipeline.check(url, client)
+            if isinstance(pipeline, Checker):
+                result = await pipeline.check_subject(subject, client)
+            else:
+                result = await pipeline.check(subject.canonical, client)
             store.save(result, telegram_user_id=user_id)
         except Exception:
             # The user already saw "checking...". Always send a follow-up.
             # Pipeline failures are caught lower down; this is a bug in our code.
-            logger.exception("check failed for user=%s", user_id)
-            blocks.append(f"I couldn't finish checking {url}.")
+            # Log the type only. The message text can be an email or a phone number.
+            logger.exception("check failed for user=%s type=%s", user_id, subject.kind)
+            blocks.append(f"I couldn't finish checking {subject.display}.")
             continue
         blocks.append(format_report(result))
-        logger.info("check user=%s verdict=%s url=%s", user_id, result.judgment.verdict, url)
+        logger.info(
+            "check user=%s verdict=%s type=%s subject=%s",
+            user_id,
+            result.judgment.verdict,
+            subject.kind,
+            subject.display,
+        )
         if _needs_virus_total_scan(result):
             pending_scans.append(result)
     if extra:
-        blocks.append(f"I only checked the first {MAX_URLS_PER_MESSAGE} links.")
+        if all(item.kind == "url" for item in subjects):
+            blocks.append(f"I only checked the first {MAX_ITEMS_PER_MESSAGE} links.")
+        else:
+            blocks.append(f"I only checked the first {MAX_ITEMS_PER_MESSAGE}.")
     # Several long URLs can push one reply past Telegram's 4096-character cap.
     for chunk in split_for_telegram("\n\n".join(blocks)):
         await send(chunk)
@@ -95,10 +118,12 @@ async def handle_text(
     if scanner is None:
         return
     for result in pending_scans:
+        # An email follow-up scans the domain, not the mailbox. ``result.url``
+        # stays the redacted address in the saved row.
         schedule(
             watch_virustotal(
                 source=scanner,
-                url=result.url,
+                url=result.scan_url or result.url,
                 client=client,
                 prior=result,
                 pipeline=pipeline,
@@ -158,7 +183,7 @@ class ScamCemeteryApplication(Application):
 def build_application(
     settings: Settings,
     store: CheckStore,
-    pipeline: Pipeline,
+    pipeline: Pipeline | Checker,
     client: httpx.AsyncClient,
     extra_clients: list[httpx.AsyncClient] | None = None,
 ) -> Application:
@@ -212,6 +237,7 @@ async def _on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         client=context.bot_data["client"],
         send=send,
         schedule=schedule,
+        default_phone_region=settings.default_phone_region,
     )
 
 

@@ -1,0 +1,102 @@
+{
+  "notes": "Offline email cases. DNS and RDAP answers are fixtures, not live lookups. The disposable case uses mailinator.com because that domain is in the vendored list.",
+  "now": "2026-11-18T00:00:00+00:00",
+  "cases": [
+    {
+      "name": "valid MX and old domain",
+      "email": "ada@example.com",
+      "mx": ["10 mx.example.com."],
+      "spf": ["v=spf1 -all"],
+      "dmarc": ["v=DMARC1; p=reject"],
+      "registered": "1995-08-13T00:00:00Z",
+      "expect": {
+        "email_syntax": "clean",
+        "mail_dns": "clean",
+        "domain_age": "clean",
+        "disposable_domain": "clean",
+        "brand_lookalike": "clean",
+        "verdict": "GO"
+      }
+    },
+    {
+      "name": "no MX",
+      "email": "ada@nomx.test",
+      "mx": [],
+      "spf": [],
+      "dmarc": [],
+      "registered": "2012-01-01T00:00:00Z",
+      "expect": {
+        "email_syntax": "clean",
+        "mail_dns": "suspicious",
+        "domain_age": "clean",
+        "disposable_domain": "clean",
+        "brand_lookalike": "clean",
+        "verdict": "CAUTION"
+      }
+    },
+    {
+      "name": "disposable",
+      "email": "ada@mailinator.com",
+      "mx": ["10 mx.mailinator.com."],
+      "spf": ["v=spf1 -all"],
+      "dmarc": ["v=DMARC1; p=none"],
+      "registered": "2003-01-01T00:00:00Z",
+      "expect": {
+        "email_syntax": "clean",
+        "mail_dns": "clean",
+        "domain_age": "clean",
+        "disposable_domain": "suspicious",
+        "brand_lookalike": "clean",
+        "verdict": "CAUTION"
+      }
+    },
+    {
+      "name": "brand typo",
+      "email": "billing@paypa1.com",
+      "mx": ["10 mx.paypa1.com."],
+      "spf": ["v=spf1 -all"],
+      "dmarc": ["v=DMARC1; p=reject"],
+      "registered": "2018-05-01T00:00:00Z",
+      "expect": {
+        "email_syntax": "clean",
+        "mail_dns": "clean",
+        "domain_age": "clean",
+        "disposable_domain": "clean",
+        "brand_lookalike": "malicious",
+        "verdict": "NO-GO"
+      }
+    },
+    {
+      "name": "new domain",
+      "email": "ada@brand-new-example.com",
+      "mx": ["10 mx.brand-new-example.com."],
+      "spf": ["v=spf1 -all"],
+      "dmarc": ["v=DMARC1; p=none"],
+      "registered": "2026-11-10T00:00:00Z",
+      "expect": {
+        "email_syntax": "clean",
+        "mail_dns": "clean",
+        "domain_age": "suspicious",
+        "disposable_domain": "clean",
+        "brand_lookalike": "clean",
+        "verdict": "CAUTION"
+      }
+    },
+    {
+      "name": "old domain",
+      "email": "ada@long-lived-example.com",
+      "mx": ["10 mx.long-lived-example.com."],
+      "spf": [],
+      "dmarc": [],
+      "registered": "2001-03-04T00:00:00Z",
+      "expect": {
+        "email_syntax": "clean",
+        "mail_dns": "clean",
+        "domain_age": "clean",
+        "disposable_domain": "clean",
+        "brand_lookalike": "clean",
+        "verdict": "GO"
+      }
+    }
+  ]
+}

@@ -8,7 +8,10 @@ __pycache__/
 .mypy_cache/
 dist/
 *.egg-info/
+# Runtime SQLite directory. The vendored list under the package is not this.
 data/
+!scam_cemetery/data/
+!scam_cemetery/data/**
 *.db
 *.sqlite
 *.sqlite3

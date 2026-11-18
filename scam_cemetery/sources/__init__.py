@@ -1,4 +1,4 @@
-"""Threat-intel sources. Each one answers the same question: is this URL known-bad?"""
+"""Sources. Link checks ask if a URL is known-bad. Email and phone checks add their own."""
 
 from scam_cemetery.sources.base import ThreatSource
 from scam_cemetery.sources.safe_browsing import SafeBrowsingSource

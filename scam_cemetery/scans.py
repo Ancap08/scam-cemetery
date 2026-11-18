@@ -85,8 +85,18 @@ async def watch_virustotal(
         if polled is None:
             continue
         sources = _replace_source(prior.sources, polled)
-        judgment = await pipeline.judge(url, sources)
-        result = CheckResult(url=url, sources=sources, judgment=judgment)
+        # Save the same display string as the first reply. For an email that is
+        # the redacted address; ``url`` here is only what VirusTotal scanned.
+        judgment = await pipeline.judge(prior.url, sources, subject_type=prior.subject_type)
+        result = CheckResult(
+            url=prior.url,
+            sources=sources,
+            judgment=judgment,
+            subject_type=prior.subject_type,
+            subject_hash=prior.subject_hash,
+            subject_display=prior.subject_display or prior.url,
+            scan_url=prior.scan_url,
+        )
         store.save(result, telegram_user_id=user_id)
         text = "VirusTotal finished scanning.\n\n" + format_report(result)
         for chunk in split_for_telegram(text):
