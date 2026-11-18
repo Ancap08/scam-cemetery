@@ -35,6 +35,21 @@ def test_email_is_not_a_link_and_is_a_subject():
     assert subjects[0].digest == hashlib.sha256(b"ada@example.com").hexdigest()
 
 
+def test_dotted_emails_are_not_crowded_out_by_fake_links():
+    text = "ada@a.mailinator.com bob@b.guerrillamail.com carl@c.yopmail.com"
+    subjects = extract_subjects(text)
+    assert [item.kind for item in subjects] == ["email", "email", "email"]
+    assert [item.canonical for item in subjects] == [
+        "ada@a.mailinator.com",
+        "bob@b.guerrillamail.com",
+        "carl@c.yopmail.com",
+    ]
+    explicit = extract_subjects("https://phish.example/login john.smith@example.com")
+    assert [item.kind for item in explicit] == ["url", "email"]
+    assert explicit[0].canonical == "https://phish.example/login"
+    assert explicit[1].canonical == "john.smith@example.com"
+
+
 def test_defanged_email():
     assert extract_urls("ada[at]example[.]com") == []
     assert [item.canonical for item in extract_subjects("ada[at]example[.]com")] == [

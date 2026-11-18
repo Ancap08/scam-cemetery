@@ -65,6 +65,19 @@ _BARE_FILE_SUFFIXES = frozenset(
 _TRAILING = ".,;:!?\"'>`"
 _MAX_URL_LENGTH = 2000
 
+# Used only to keep a bare host from being cut out of an email address.
+# ``john.smith@example.com`` must not become the link john.smith, and
+# ``ada@a.mailinator.com`` must not become the link mailinator.com.
+_EMAIL_SPAN = re.compile(
+    r"""(?ix)
+    (?<![A-Za-z0-9._%+\-])
+    [A-Za-z0-9](?:[A-Za-z0-9._%+\-]{0,62}[A-Za-z0-9])?
+    @
+    (?:[A-Za-z0-9](?:[A-Za-z0-9\-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}
+    (?![A-Za-z0-9\-])
+    """
+)
+
 
 def extract_urls(text: str) -> list[str]:
     """Return unique http(s) URLs in the order they appear.
@@ -86,8 +99,18 @@ def extract_urls(text: str) -> list[str]:
         found.append((match.start(), url))
         occupied.append((match.start(), match.end()))
 
+    # Explicit links keep their spans. A bare host that sits inside an email
+    # does not: the address is the thing to check, not a piece of it.
+    email_spans = [
+        match.span()
+        for match in _EMAIL_SPAN.finditer(refanged)
+        if not _overlaps(match.start(), match.end(), occupied)
+    ]
+
     for match in _BARE_URL.finditer(refanged):
         if _overlaps(match.start(), match.end(), occupied):
+            continue
+        if _overlaps(match.start(), match.end(), email_spans):
             continue
         raw = match.group("host") + match.group("rest")
         if _bare_looks_like_filename(match.group("host"), match.group("rest")):
@@ -181,13 +204,20 @@ def _bare_looks_like_filename(host: str, rest: str) -> bool:
 def find_url_spans(refanged: str) -> tuple[list[tuple[int, int]], list[tuple[int, int]]]:
     """Return ``(scheme spans, bare spans)`` in already-refanged text.
 
-    Bare spans include the host of an email address (``ada@example.com``).
-    Callers that want to keep the email should not treat that overlap as a URL.
+    A bare host inside an email address is not a span. Callers still skip an
+    email that sits inside a scheme URL, so ``https://user:pass@host`` stays a link.
     """
     scheme = [match.span() for match in _SCHEME_URL.finditer(refanged)]
+    emails = [
+        match.span()
+        for match in _EMAIL_SPAN.finditer(refanged)
+        if not _overlaps(match.start(), match.end(), scheme)
+    ]
     bare: list[tuple[int, int]] = []
     for match in _BARE_URL.finditer(refanged):
         if _overlaps(match.start(), match.end(), scheme):
+            continue
+        if _overlaps(match.start(), match.end(), emails):
             continue
         if _bare_looks_like_filename(match.group("host"), match.group("rest")):
             continue

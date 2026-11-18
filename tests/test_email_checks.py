@@ -128,6 +128,54 @@ async def test_email_fixtures_get_the_expected_statuses(case: dict):
     assert local not in blob or len(local) < 4
 
 
+async def test_a_null_mx_means_the_domain_does_not_accept_mail():
+    resolver = FakeDns(
+        {
+            ("nowhere.example", "MX"): ["0 ."],
+            ("nowhere.example", "TXT"): [],
+            ("_dmarc.nowhere.example", "TXT"): [],
+        }
+    )
+    async with httpx.AsyncClient() as client:
+        result = await MailDnsSource(resolver).lookup("ada@nowhere.example", client)
+    assert result.status == "suspicious"
+    assert "null MX" in result.summary
+    assert result.detail["mx"] is False
+
+
+async def test_domain_age_uses_the_registered_parent_when_the_host_is_missing():
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "data.iana.org":
+            return httpx.Response(
+                200,
+                json={"services": [[["com"], ["https://rdap.test/rdap/"]]]},
+            )
+        seen.append(request.url.path)
+        if request.url.path == "/rdap/domain/mail.new-domain.com":
+            return httpx.Response(404, json={})
+        if request.url.path == "/rdap/domain/new-domain.com":
+            return httpx.Response(
+                200,
+                json={
+                    "events": [{"eventAction": "registration", "eventDate": "2026-11-10T00:00:00Z"}]
+                },
+            )
+        raise AssertionError(request.url.path)
+
+    async with mock_client(handler) as client:
+        result = await DomainAgeSource(now=lambda: _NOW).lookup("user@mail.new-domain.com", client)
+    assert seen == [
+        "/rdap/domain/mail.new-domain.com",
+        "/rdap/domain/new-domain.com",
+    ]
+    assert result.status == "suspicious"
+    assert "new-domain.com" in result.summary
+    assert result.detail["registered_domain"] == "new-domain.com"
+    assert result.detail["age_days"] == 8
+
+
 async def test_disposable_and_lookalike_are_never_go_even_if_grok_says_so():
     def handler(request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content)

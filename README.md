@@ -121,7 +121,7 @@ What each source means:
 - **VirusTotal.** One or more engines marking the URL malicious is a hit. Suspicious-only is caution. A URL it has never scanned does not change the first verdict when another source is clean. The bot then submits it for analysis and follows up.
 - **URLhaus.** A listed URL is malicious, including one marked offline. `no_results` is clean, because URLhaus only lists malware URLs.
 - **Email syntax.** A parsed address is clean. The reply names the domain, not the mailbox.
-- **Mail DNS.** No MX record is suspicious. SPF and DMARC are reported; missing either one does not change the verdict by itself.
+- **Mail DNS.** No MX record is suspicious, including a null MX (`0 .`), which means the domain does not accept mail. SPF and DMARC are reported; missing either one does not change the verdict by itself.
 - **Domain age.** RDAP via the IANA bootstrap, no key. Registered under 30 days ago is suspicious. A missing date does not, by itself, block GO when another source is clean.
 - **Disposable domain.** A snapshot of the normal-mode list from [disposable/disposable](https://github.com/disposable/disposable), vendored in the package. Ordinary freemail is not on that list. A hit is suspicious.
 - **Brand lookalike.** Homoglyphs, one-character typos of longer names, bait words (`paypal-secure`), a different top-level domain, and a brand domain embedded in a longer host. The real domain and its own subdomains are clean.
