@@ -16,6 +16,7 @@ _DOT_DEFANG = re.compile(
 _COLON_DEFANG = re.compile(r"\[\s*:\s*\]")
 _HXXPS = re.compile(r"hxxps", re.I)
 _HXXP = re.compile(r"hxxp", re.I)
+_AT_DEFANG = re.compile(r"\[\s*at\s*\]|\(\s*at\s*\)|\{\s*at\s*\}", re.I)
 
 # A schemed URL runs until whitespace or a wrapper that usually ends a sentence.
 _SCHEME_URL = re.compile(
@@ -25,11 +26,13 @@ _SCHEME_URL = re.compile(
     """
 )
 
-# A bare host: example.com or example.com/path. The lookbehind skips emails.
+# A bare host: example.com or example.com/path. The lookbehind skips emails
+# and the middle of a hyphenated name, so user@long-lived-example.com is not
+# also the link lived-example.com.
 _BARE_URL = re.compile(
     r"""(?ix)
     (?<!@)
-    (?<![\w:/])
+    (?<![\w:/-])
     (?P<host>(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,})
     (?P<rest>(?::\d{2,5})?(?:/[^\s<>"'`]*)?(?:\?[^\s<>"'`]*)?)
     """
@@ -62,6 +65,19 @@ _BARE_FILE_SUFFIXES = frozenset(
 _TRAILING = ".,;:!?\"'>`"
 _MAX_URL_LENGTH = 2000
 
+# Used only to keep a bare host from being cut out of an email address.
+# ``john.smith@example.com`` must not become the link john.smith, and
+# ``ada@a.mailinator.com`` must not become the link mailinator.com.
+_EMAIL_SPAN = re.compile(
+    r"""(?ix)
+    (?<![A-Za-z0-9._%+\-])
+    [A-Za-z0-9](?:[A-Za-z0-9._%+\-]{0,62}[A-Za-z0-9])?
+    @
+    (?:[A-Za-z0-9](?:[A-Za-z0-9\-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}
+    (?![A-Za-z0-9\-])
+    """
+)
+
 
 def extract_urls(text: str) -> list[str]:
     """Return unique http(s) URLs in the order they appear.
@@ -83,8 +99,18 @@ def extract_urls(text: str) -> list[str]:
         found.append((match.start(), url))
         occupied.append((match.start(), match.end()))
 
+    # Explicit links keep their spans. A bare host that sits inside an email
+    # does not: the address is the thing to check, not a piece of it.
+    email_spans = [
+        match.span()
+        for match in _EMAIL_SPAN.finditer(refanged)
+        if not _overlaps(match.start(), match.end(), occupied)
+    ]
+
     for match in _BARE_URL.finditer(refanged):
         if _overlaps(match.start(), match.end(), occupied):
+            continue
+        if _overlaps(match.start(), match.end(), email_spans):
             continue
         raw = match.group("host") + match.group("rest")
         if _bare_looks_like_filename(match.group("host"), match.group("rest")):
@@ -109,6 +135,7 @@ def refang(text: str) -> str:
     """Undo the defangs this bot knows about. Other text is left as-is."""
     text = _DOT_DEFANG.sub(".", text)
     text = _COLON_DEFANG.sub(":", text)
+    text = _AT_DEFANG.sub("@", text)
     text = _HXXPS.sub("https", text)
     text = _HXXP.sub("http", text)
     return text
@@ -172,6 +199,30 @@ def _bare_looks_like_filename(host: str, rest: str) -> bool:
         return False
     suffix = host.rsplit(".", 1)[-1].lower()
     return suffix in _BARE_FILE_SUFFIXES
+
+
+def find_url_spans(refanged: str) -> tuple[list[tuple[int, int]], list[tuple[int, int]]]:
+    """Return ``(scheme spans, bare spans)`` in already-refanged text.
+
+    A bare host inside an email address is not a span. Callers still skip an
+    email that sits inside a scheme URL, so ``https://user:pass@host`` stays a link.
+    """
+    scheme = [match.span() for match in _SCHEME_URL.finditer(refanged)]
+    emails = [
+        match.span()
+        for match in _EMAIL_SPAN.finditer(refanged)
+        if not _overlaps(match.start(), match.end(), scheme)
+    ]
+    bare: list[tuple[int, int]] = []
+    for match in _BARE_URL.finditer(refanged):
+        if _overlaps(match.start(), match.end(), scheme):
+            continue
+        if _overlaps(match.start(), match.end(), emails):
+            continue
+        if _bare_looks_like_filename(match.group("host"), match.group("rest")):
+            continue
+        bare.append(match.span())
+    return scheme, bare
 
 
 def _overlaps(start: int, end: int, spans: list[tuple[int, int]]) -> bool:

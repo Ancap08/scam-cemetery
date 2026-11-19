@@ -4,10 +4,13 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+import phonenumbers
+
 DEFAULT_DATABASE_PATH = "data/checks.db"
 DEFAULT_XAI_MODEL = "grok-4.7"
 DEFAULT_SOURCE_TIMEOUT_SECONDS = 8.0
 DEFAULT_XAI_TIMEOUT_SECONDS = 20.0
+DEFAULT_PHONE_REGION = "US"
 XAI_BASE_URL = "https://api.x.ai/v1"
 
 
@@ -24,6 +27,8 @@ class Settings:
     google_safe_browsing_key: str | None
     virustotal_api_key: str | None
     urlhaus_auth_key: str | None
+    numverify_api_key: str | None
+    default_phone_region: str
     allowed_telegram_user_ids: frozenset[int]
     database_path: str
     source_timeout_seconds: float
@@ -38,6 +43,8 @@ class Settings:
             configured.append("virustotal")
         if self.urlhaus_auth_key:
             configured.append("urlhaus")
+        if self.numverify_api_key:
+            configured.append("numverify")
         judge = "grok" if self.xai_api_key else "rules-only"
         allowed = ",".join(str(user_id) for user_id in sorted(self.allowed_telegram_user_ids))
         return (
@@ -46,7 +53,8 @@ class Settings:
             f"database_path={self.database_path!r}, "
             f"sources={configured}, "
             f"judge={judge}, "
-            f"model={self.xai_model!r})"
+            f"model={self.xai_model!r}, "
+            f"phone_region={self.default_phone_region})"
         )
 
     @classmethod
@@ -62,6 +70,8 @@ class Settings:
             google_safe_browsing_key=_optional(values, "GOOGLE_SAFE_BROWSING_KEY"),
             virustotal_api_key=_optional(values, "VIRUSTOTAL_API_KEY"),
             urlhaus_auth_key=_optional(values, "URLHAUS_AUTH_KEY"),
+            numverify_api_key=_optional(values, "NUMVERIFY_API_KEY"),
+            default_phone_region=_phone_region(values),
             allowed_telegram_user_ids=allowed,
             database_path=_optional(values, "DATABASE_PATH") or DEFAULT_DATABASE_PATH,
             source_timeout_seconds=_positive_float(
@@ -104,6 +114,14 @@ def _parse_user_ids(raw: str) -> frozenset[int]:
             )
         ids.add(user_id)
     return frozenset(ids)
+
+
+def _phone_region(env: Mapping[str, str]) -> str:
+    raw = _optional(env, "DEFAULT_PHONE_REGION") or DEFAULT_PHONE_REGION
+    region = raw.upper()
+    if region not in phonenumbers.SUPPORTED_REGIONS:
+        raise ConfigError(f"DEFAULT_PHONE_REGION is not a known region: {raw!r}")
+    return region
 
 
 def _positive_float(env: Mapping[str, str], name: str, default: float) -> float:

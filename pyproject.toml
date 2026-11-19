@@ -1,11 +1,13 @@
 [project]
 name = "scam-cemetery"
-version = "0.1.0"
-description = "Telegram link checker: paste a URL, get a GO, CAUTION, or NO-GO verdict."
+version = "0.2.0"
+description = "Telegram checker: paste a link, email, or phone number, get a GO, CAUTION, or NO-GO verdict."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "dnspython>=2.6",
     "httpx>=0.27",
+    "phonenumbers>=8.13",
     "python-telegram-bot>=21.6",
 ]
 
@@ -25,6 +27,9 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["scam_cemetery*"]
+
+[tool.setuptools.package-data]
+scam_cemetery = ["data/*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

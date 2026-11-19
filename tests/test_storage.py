@@ -103,6 +103,8 @@ async def test_application_start_runs_cleanup_without_the_startup_warning(tmp_pa
         google_safe_browsing_key=None,
         virustotal_api_key=None,
         urlhaus_auth_key=None,
+        numverify_api_key=None,
+        default_phone_region="US",
         allowed_telegram_user_ids=frozenset({1}),
         database_path=str(store.path),
         source_timeout_seconds=8,

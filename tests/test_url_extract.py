@@ -46,6 +46,9 @@ def test_defanged_hxxps_dot_word_and_colon():
 def test_email_and_filename_are_not_links():
     assert extract_urls("mail me at ada@example.com") == []
     assert extract_urls("the notes are in report.txt") == []
+    assert extract_urls("john.smith@example.com") == []
+    assert extract_urls("ada@a.mailinator.com") == []
+    assert extract_urls("see example.com and john.smith@example.com") == ["https://example.com"]
 
 
 def test_trailing_punctuation_and_parentheses():

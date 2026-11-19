@@ -18,5 +18,15 @@ class JudgeUnavailable(Exception):
 class Judge(Protocol):
     name: str
 
-    async def judge(self, url: str, results: list[SourceResult]) -> Judgment:
-        """Return a verdict and a plain-English reason, or raise if unavailable."""
+    async def judge(
+        self,
+        url: str,
+        results: list[SourceResult],
+        *,
+        subject_type: str = "url",
+    ) -> Judgment:
+        """Return a verdict and a plain-English reason, or raise if unavailable.
+
+        ``subject_type`` is ``url``, ``email``, or ``phone``. The reason should
+        say "this URL", "this email", or "this phone number".
+        """

@@ -19,7 +19,7 @@ VERDICTS: tuple[Verdict, ...] = ("GO", "CAUTION", "NO-GO")
 
 @dataclass(frozen=True)
 class SourceResult:
-    """What one threat-intel source said about a URL."""
+    """What one source said about a link, an email address, or a phone number."""
 
     source: str
     display_name: str
@@ -48,8 +48,18 @@ class Judgment:
 
 @dataclass(frozen=True)
 class CheckResult:
-    """One finished check: the URL, every source, and the verdict."""
+    """One finished check.
+
+    ``url`` is what the reply shows. For an email or a phone number that is the
+    redacted form, never the raw value. ``subject_hash`` is the SHA-256 of the
+    canonical form (the link, the lowercased email, or E.164). ``scan_url`` is
+    the domain URL a VirusTotal follow-up should submit. It is not stored.
+    """
 
     url: str
     sources: list[SourceResult]
     judgment: Judgment
+    subject_type: str = "url"
+    subject_hash: str = ""
+    subject_display: str = ""
+    scan_url: str = ""
